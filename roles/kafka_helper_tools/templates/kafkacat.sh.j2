@@ -1,0 +1,9 @@
+#!/bin/bash
+kafkacat -b "{% for host in groups['kafka_broker'] %}{% if loop.index > 1%},{% endif %}{{ host }}:{{kafka_client_listeners[kafka_helper_tools_kafka_listener_name]['port']}}{% endfor %}" \
+  -X "security.protocol={{kafka_client_listeners[kafka_helper_tools_kafka_listener_name]['sasl_protocol']| kafka_protocol(kafka_client_listeners[kafka_helper_tools_kafka_listener_name]['ssl_enabled'])}}" \
+{% if kafka_client_listeners[kafka_helper_tools_kafka_listener_name]['sasl_protocol']| normalize_sasl_protocol == 'PLAIN' %}
+  -X "sasl.mechanisms={{kafka_client_listeners[kafka_helper_tools_kafka_listener_name]['sasl_protocol']| normalize_sasl_protocol}}" \
+  -X "sasl.username={{sasl_plain_users.admin.principal}}" \
+  -X "sasl.password={{sasl_plain_users.admin.password}}" \
+{% endif %}
+  "$@"

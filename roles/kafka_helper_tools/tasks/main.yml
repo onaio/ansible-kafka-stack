@@ -1,0 +1,30 @@
+- name: Install ping
+  package:
+    name: iputils-ping
+    state: present
+
+- name: Install netcat
+  package:
+    name: netcat
+    state: present
+
+- name: Install kafkacat
+  package:
+    name: kafkacat
+    state: present
+
+- name: Create kafkacat.sh
+  template:
+    src: kafkacat.sh.j2
+    dest: "{{kafka_helper_tools_dir}}/kafkacat.sh"
+    mode: 0755
+    owner: "{{kafka_broker.user}}"
+    group: "{{kafka_broker.group}}"
+
+- name: Create admin.properties
+  template:
+    src: admin.properties.j2
+    dest: "{{kafka_helper_tools_dir}}/admin.properties"
+    mode: 0755
+    owner: "{{kafka_broker.user}}"
+    group: "{{kafka_broker.group}}"

@@ -1,0 +1,34 @@
+# Loads confluent defaults and repositories into the specified hosts
+# Used in basically all the other service playbooks
+---
+- name: Confluent Defaults From Roles
+  import_playbook: ./roles/confluent_defaults/confluent_defaults.yml
+  tags:
+    - always
+  vars:
+    defaults_hosts: "{{ repo_hosts | default('all') }}"
+
+- name: Confluent Repositories Provisioning
+  hosts: "{{ repo_hosts | default('all') }}"
+  tags:
+    - confluent_repos
+  pre_tasks:
+    - debug:
+        var: confluent
+      run_once: true
+
+    - name: Add open JDK repo with retry (since this is buggy)
+      apt_repository:
+        repo: "ppa:openjdk-r/ppa"
+      register: result
+      retries: 300
+      delay: 1
+      until: result is success
+
+  roles:
+    - role: confluent.common
+      when: "not ((role_confluent_common | default(False)) | bool)"
+  tasks:
+    # Only do this once per playbook, because it can be slow
+    - set_fact:
+        role_confluent_common: True

@@ -1,0 +1,42 @@
+---
+- name: Ops Restore Kafka Pre
+  hosts: kafka_broker
+  gather_facts: no
+  tasks:
+    - name: duply pre restore
+      shell: duply kafka_restore pre
+
+- name: Ops Restore Zookeeper Pre
+  hosts: zookeeper
+  gather_facts: no
+  tasks:
+    - name: duply pre restore
+      shell: duply zookeeper_restore pre
+
+- name: Ops Restore Zookeeper
+  hosts: zookeeper
+  gather_facts: no
+  tasks:
+    - name: duply restore
+      shell: duply zookeeper restore
+
+- name: Ops Restore Zookeeper Post
+  hosts: zookeeper
+  gather_facts: no
+  tasks:
+    - name: duply post restore
+      shell: duply zookeeper_restore post
+
+- name: Ops Restore kafka
+  hosts: kafka_broker
+  gather_facts: no
+  tasks:
+    - name: duply restore
+      shell: duply kafka restore
+
+- name: Ops Restore Kafka Post
+  hosts: kafka_broker
+  gather_facts: no
+  tasks:
+    - name: duply post restore
+      shell: duply kafka_restore post

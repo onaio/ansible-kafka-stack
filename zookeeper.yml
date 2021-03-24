@@ -1,0 +1,36 @@
+---
+- name: Confluent Defaults and Repo Provisioning
+  import_playbook: ./confluent.yml
+  vars:
+    repo_hosts: zookeeper
+
+- name: Zookeeper Provisioning
+  hosts: zookeeper
+  tags:
+    - zookeeper
+  pre_tasks:
+    - debug:
+        var: zookeeper
+      run_once: true
+  roles:
+    - role: confluent.zookeeper
+
+- name: Zookeeper Helper Tools Provisioning
+  hosts: zookeeper:kafka_broker
+  tags:
+    - zookeeper
+    - zookeeper_helper_tools
+  roles:
+    - role: ./roles/zookeeper_helper_tools
+      when: add_helper_tools | bool
+
+- name: Zookeeper Backup Provisioning
+  hosts: zookeeper
+  tags:
+    - zookeeper
+    - zookeeper_backup
+  roles:
+    - role: Stouts.backup
+      vars:
+        backup_profiles: "{{ zookeeper_backup_profiles }}"
+      when: is_backup_enabled | bool

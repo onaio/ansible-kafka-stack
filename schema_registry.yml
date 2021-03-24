@@ -1,0 +1,16 @@
+---
+- name: Confluent Defaults and Repo Provisioning
+  import_playbook: ./confluent.yml
+  vars:
+    repo_hosts: schema_registry
+
+- name: Schema Registry Provisioning
+  hosts: schema_registry
+  tags:
+    - schema_registry
+  pre_tasks:
+    - debug:
+        var: schema_registry
+      run_once: true
+  roles:
+    - role: confluent.schema_registry

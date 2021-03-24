@@ -1,0 +1,9 @@
+---
+- name: Ops Backup Original Kafka Partitions (for safety)
+  import_playbook: ops_backup_zookeeper.yml
+
+- name: Ops Backup Kafka Brokers
+  import_playbook: ops_backup_kafka_brokers.yml
+
+- name: Ops Backup Current Kafka Partitions
+  import_playbook: ops_backup_zookeeper.yml

@@ -1,0 +1,7 @@
+---
+- name: Ops Backup Zookeeper
+  hosts: zookeeper
+  gather_facts: no
+  tasks:
+    - name: duply backup
+      shell: duply zookeeper backup

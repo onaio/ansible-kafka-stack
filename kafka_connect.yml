@@ -1,0 +1,16 @@
+---
+- name: Confluent Defaults and Repo Provisioning
+  import_playbook: ./confluent.yml
+  vars:
+    repo_hosts: kafka_connect
+
+- name: Kafka Connect Provisioning
+  hosts: kafka_connect
+  tags:
+    - kafka_connect
+  pre_tasks:
+    - debug:
+        var: kafka_connect
+      run_once: true
+  roles:
+    - role: confluent.kafka_connect

@@ -1,0 +1,20 @@
+---
+- name: Prepare Canopy Kafka
+  hosts: localhost
+  tasks:
+
+    - name: Fix Silly Molecule issue - no way to override ANSIBLE_ROLES for user-specific directories
+      file:
+        src: ~/.ansible/roles/ona
+        dest: ./user_roles
+        state: link
+
+    - name: Create local Canopy Kafka hostname
+      become: true
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.88\.1'
+        line: 127.0.88.1 canopy-kafka.docker
+        owner: root
+        group: root
+        mode: '0644'

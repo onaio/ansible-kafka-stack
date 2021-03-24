@@ -1,0 +1,59 @@
+# Example of a dev-style topology with minimal nodes
+
+all:
+  vars:
+    # canopy_kafka_admin_password: generated
+    # canopy_kafka_sasl_plain_users: {}
+    # canopy_kafka_internal_port: 9091
+    # canopy_kafka_external_port: 9092
+    # canopy_kafka_add_helper_tools: True
+    
+    # canopy_kafka_confluent_package_version: "5.4.0-1"
+    # canopy_kafka_confluent_repo_version: "5.4"
+    
+    # canopy_kafka_zookeeper_client_port: 2181
+    # canopy_kafka_schema_registry_listener_port: 8081
+    # canopy_kafka_kafka_connect_rest_port: 8083
+    # canopy_kafka_kafka_connect_local_rest_port: 8084
+
+    # canopy_kafka_is_backup_enabled: True
+    # canopy_kafka_backup_topics_regex: ".*"
+    # canopy_kafka_backup_topics_dir: "/var/backup/topics"
+
+    # canopy_kafka_is_restore_enabled: False
+    # canopy_kafka_restore_topics_dir: "/var/backup/topics"
+
+zookeeper:
+  hosts:
+    host1:
+    host2:
+    host3:
+
+kafka_broker:
+  hosts:
+    host1:
+      external_host: localhost
+      external_port: 9191
+    host2:
+      external_host: host2.localhost
+      external_port: 9192
+    host3:
+      external_host: host3.localhost
+      external_port: 9193
+
+schema_registry:
+  hosts:
+    host1:
+    host2:
+    host3:
+
+kafka_connect:
+  hosts:
+    host1:
+    host2:
+    host3:
+
+kafka_backup_restore:
+  hosts:
+    host1:
+

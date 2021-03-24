@@ -1,0 +1,235 @@
+# There's a lot of variables that need to be set here - anything starting with an underscore "_" is
+# not used outside this variable file, to make it easier to understand exactly what is being set.
+
+# DRAGONS: confluent_defaults is populated by the confluent_defaults.yml playbook - edit there to add
+# more default-values-that-are-hashes-and-so-can't-be-partially-overridden if required.
+
+#
+# Collect stack variables with defaults
+#
+
+admin_password: "{{ canopy_kafka_admin_password | default(lookup('password', '.generated_canopy_kafka_admin_password length=30 chars=ascii_letters')) }}"
+_sasl_plain_users_overrides: "{{ canopy_kafka_sasl_plain_users | default({}) }}"
+internal_port: "{{ canopy_kafka_internal_port | default(9091) }}"
+external_port: "{{ canopy_kafka_external_port | default(9092) }}"
+add_helper_tools: "{{ canopy_kafka_add_helper_tools | default(True) }}"
+
+confluent_package_version: "{{ canopy_kafka_confluent_package_version | default('5.4.0-1') }}"
+confluent_repo_version: "{{ canopy_kafka_confluent_repo_version | default('5.4') }}"
+
+zookeeper_client_port: "{{ canopy_kafka_zookeeper_client_port | default(2181) }}"
+
+schema_registry_listener_port: "{{ canopy_kafka_schema_registry_listener_port | default(8081) }}"
+
+connect_rest_port: "{{ canopy_kafka_connect_rest_port | default(8083) }}"
+
+# Broken in Stouts because of quoting
+#backup_duplicity_version: "{{ canopy_kafka_backup_duplicity_version | default('\"0.7.19-0ubuntu0ppa1374~ubuntu18.04.1\"') }}"
+_backup_schedule: "{{ canopy_kafka_backup_schedule | default('0 0 * * 0') }}"
+_backup_max_age: "{{ canopy_kafka_backup_max_age | default('7D') }}"
+_backup_target: "{{ canopy_kafka_backup_target | default('file:///canopy_kafka_backups') }}"
+_backup_recovery_interval_secs: "{{ canopy_kafka_backup_recovery_interval_secs | default(30) }}"
+_backup_s3_using_http: "{{ canopy_kafka_backup_s3_using_http | default(False) }}"
+
+is_backup_enabled: "{{ canopy_kafka_is_backup_enabled | default(True) }}"
+
+#
+# Normalize for cp-ansible
+#
+
+# Note that versions > 5.4 are required for our backups to work correctly
+_confluent_overrides:
+  package_version: "{{ confluent_package_version }}"
+  repo_version: "{{ confluent_repo_version }}"
+
+confluent: "{{ confluent_defaults.confluent | combine(_confluent_overrides, recursive=True) }}"
+
+#
+# cp-ansible zookeeper
+#
+
+zookeeper_client:
+  properties:
+    clientPort: "{{ zookeeper_client_port }}"
+
+_zookeeper_service_environment_overrides_overrides:
+  EXTRA_ARGS: "-Dzookeeper.extendedTypesEnabled=true"
+
+zookeeper_service_environment_overrides: "{{ confluent_defaults.zookeeper_service_environment_overrides | combine(_zookeeper_service_environment_overrides_overrides, recursive=True) }}"
+
+_zookeeper_overrides:
+  properties:
+    clientPort: "{{ zookeeper_client_port }}"
+    4lw.commands.whitelist: "*"
+    quorumListenOnAllIPs: "true"
+
+zookeeper: "{{ confluent_defaults.zookeeper | combine(_zookeeper_overrides, recursive=True) }}"
+
+#
+# cp-ansible kafka_broker
+#
+
+_default_sasl_plain_users:
+  admin:
+    principal: admin
+    password: "{{ admin_password }}"
+  # Set utility passwords as derived from the admin password - they should have admin access too but
+  # different credentials to make it harder to compromise admin pw
+  schema_registry:
+    principal: schema_registry
+    password: "{{ ('schema_registry' + admin_password) | hash('sha256') }}"
+  kafka_connect:
+    principal: kafka_connect
+    password: "{{ ('kafka_connect' + admin_password) | hash('sha256') }}"
+
+sasl_protocol: plain
+sasl_plain_users: "{{ _default_sasl_plain_users | combine(_sasl_plain_users_overrides, recursive=True) }}"
+
+# Because of a bug in the kafka_broker role, the scram admin is actually used for plain too :-/
+sasl_scram_users:
+  admin:
+    principal: admin
+    password: "{{ sasl_plain_users.admin.password }}"
+
+kafka_client_listeners:
+  external:
+    name: EXTERNAL
+    port: "{{ hostvars[inventory_hostname].external_port | default(external_port) }}"
+    # TODO: Enable SSL via external proxy?
+    ssl_enabled: false
+    ssl_mutual_auth_enabled: false
+    sasl_protocol: "plain"
+  internal:
+    name: INTERNAL
+    port: "{{ internal_port }}"
+    ssl_enabled: false
+    ssl_mutual_auth_enabled: false
+    sasl_protocol: "plain"
+
+# To reassure everybody, again, that we aren't using kerberos, yuck
+kafka_broker_sasl_enabled_mechanisms: ["plain"]
+
+kafka_broker_inter_broker_listener_name: internal
+
+_internal_me: "{{ inventory_hostname }}"
+_external_me: "{{ hostvars[inventory_hostname].external_canopy_kafka_broker_host | default(inventory_hostname) }}"
+
+_kafka_broker_overrides:
+  properties:
+    # By default, store data indefinitely
+    log.retention.hours: -1
+    # Every 30s see if we should delete data
+    log.retention.check.interval.ms: 30000
+    # Don't expire consumer offsets (can't set to -1, but this is ~4000 years)
+    offsets.retention.minutes: 2147483647
+    advertised.listeners: "INTERNAL://{{ _internal_me }}:{{ kafka_client_listeners.internal.port }},EXTERNAL://{{ _external_me }}:{{ kafka_client_listeners.external.port }}"
+    confluent.metrics.reporter.bootstrap.servers: "{{inventory_hostname}}:{{kafka_client_listeners.internal.port}}"
+    default.replication.factor: "{{ '1' if (groups['kafka_broker'] | length) < 3 else confluent_defaults.kafka_broker.properties['offsets.topic.replication.factor'] }}"
+    offsets.topic.replication.factor: "{{ '1' if (groups['kafka_broker'] | length) < 3 else confluent_defaults.kafka_broker.properties['offsets.topic.replication.factor'] }}"
+    transaction.state.log.min.isr: "{{ '1' if (groups['kafka_broker'] | length) < 3 else confluent_defaults.kafka_broker.properties['transaction.state.log.min.isr'] }}"
+    transaction.state.log.replication.factor: "{{ '1' if (groups['kafka_broker'] | length) < 3 else confluent_defaults.kafka_broker.properties['transaction.state.log.replication.factor'] }}"
+    confluent.metrics.reporter.topic.replicas: "{{ '1' if (groups['kafka_broker'] | length) < 3 else confluent_defaults.kafka_broker.properties['confluent.metrics.reporter.topic.replicas'] }}"
+
+kafka_broker: "{{ confluent_defaults.kafka_broker | combine(_kafka_broker_overrides, recursive=True) }}"
+
+#
+# cp-ansible schema_registry
+#
+
+schema_registry_kafka_listener_name: internal
+
+schema_registry_http_protocol: http
+#schema_registry_listener_port:
+
+#
+# cp-ansible kafka connect
+#
+
+# Connect kafka connect on a subnet
+kafka_connect_kafka_listener_name: internal
+kafka_connect_local_kafka_listener_name: internal
+
+kafka_connect_http_protocol: http
+kafka_connect_rest_port: "{{ connect_rest_port }}"
+kafka_connect_local_http_protocol: http
+kafka_connect_local_rest_port: "{{ connect_local_rest_port }}"
+
+_kafka_connect_overrides:
+  properties:
+    # Not added for some reason in confluent?
+    producer.sasl.jaas.config: "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"{{sasl_plain_users.kafka_connect.principal}}\" password=\"{{sasl_plain_users.kafka_connect.password}}\";"
+    consumer.sasl.jaas.config: "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"{{sasl_plain_users.kafka_connect.principal}}\" password=\"{{sasl_plain_users.kafka_connect.password}}\";"
+
+kafka_connect: "{{ confluent_defaults.kafka_connect | combine(_kafka_connect_overrides, recursive=True) }}"
+
+#
+# Backup-restore
+#
+
+_backup_s3_param: "{% if _backup_s3_using_http | bool %}DUPL_PARAMS=\"$DUPL_PARAMS --s3-unencrypted-connection\"{% endif %}"
+
+_zookeeper_source: "{{ zookeeper.properties.dataDir }}"
+_zookeeper_target: "{{ _backup_target }}/zookeeper.{{ zookeeper_id | default(groups['zookeeper'].index(inventory_hostname) + 1) }}"
+
+zookeeper_backup_profiles:
+
+  - name: zookeeper
+    schedule: "{{ _backup_schedule }}"
+    max_age: "{{ _backup_max_age }}"
+    source:  "{{ _zookeeper_source }}"
+    target: "{{ _zookeeper_target }}"
+    params:
+      - "{{ _backup_s3_param }}"
+    pre_actions:
+      - cp "/etc/kafka/zookeeper.properties" "{{ _zookeeper_source }}/.zookeeper.properties.backup"
+
+  - name: zookeeper_restore
+    source: "{{ _zookeeper_source }}"
+    target: "{{ _zookeeper_target }}"
+    params:
+      - "{{ _backup_s3_param }}"
+    action: restore
+    pre_actions:
+      - systemctl stop confluent-zookeeper
+      - rm -rf "/pre_restore{{ _zookeeper_source }}" || true
+      - mkdir -p "/pre_restore{{ _zookeeper_source }}"
+      - mv "{{ _zookeeper_source }}" "/pre_restore{{ _zookeeper_source }}" || true
+    post_actions:
+      - systemctl start confluent-zookeeper
+
+_kafka_source: "{{ kafka_broker.datadir[0] }}"
+_broker_id: "{{ broker_id | default(groups['kafka_broker'].index(inventory_hostname) + 1) }}"
+_kafka_target: "{{ _backup_target }}/kafka.{{ _broker_id }}"
+
+kafka_backup_profiles:
+
+  - name: kafka
+    schedule: "{{ _backup_schedule }}"
+    max_age: "{{ _backup_max_age }}"
+    source:  "{{ _kafka_source }}"
+    target: "{{ _kafka_target }}"
+    params:
+      - "{{ _backup_s3_param }}"
+    pre_actions:
+      - zklease.sh kafka_backup 86400
+      - systemctl stop confluent-kafka
+      - cp "/etc/kafka/server.properties" "{{ _kafka_source }}/.server.properties.backup"
+    post_actions:
+      - systemctl start confluent-kafka
+      - sleep "{{ _backup_recovery_interval_secs }}"
+      - zklease.sh --release kafka_backup
+
+  - name: kafka_restore
+    source: "{{ _kafka_source }}"
+    target: "{{ _kafka_target }}"
+    params:
+      - "{{ _backup_s3_param }}"
+    action: restore
+    pre_actions:
+      - systemctl stop confluent-kafka
+      - rm -rf "/pre_restore{{ _kafka_source }}" || true
+      - mkdir -p "/pre_restore{{ _kafka_source }}"
+      - mv "{{ _kafka_source }}" "/pre_restore{{ _kafka_source }}" || true
+    post_actions:
+      - zkshell.sh delete /brokers/ids/{{ _broker_id }} || true
+      - systemctl start confluent-kafka

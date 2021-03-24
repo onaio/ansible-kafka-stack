@@ -1,0 +1,40 @@
+---
+- name: Verify Canopy Kafka
+  hosts: all
+  vars:
+    test_topic_name: "test_topic_{{ inventory_hostname }}"
+  tasks:
+    - name: Cleanup topic
+      shell:
+        cmd: "kafka-topics --zookeeper localhost:2181 --delete --topic {{ test_topic_name }} || sleep 2"
+
+    - name: Create new topic
+      shell:
+        cmd: "kafka-topics --bootstrap-server localhost:9091 --command-config /usr/bin/admin.properties --create --topic {{ test_topic_name }}"
+
+    - name: Get partitions and replication for new topic
+      shell:
+        cmd: "kafka-topics --zookeeper localhost:2181 --describe --topic {{ test_topic_name }} | head -n 1 | awk '{print $4,$6}'"
+      register: describe_output
+
+    - assert:
+        that:
+          - describe_output.stdout == '1 3'
+
+    - name: Get default log retention
+      shell:
+        cmd: " cat /etc/kafka/server.properties | grep log.retention.hours | awk -F= '{print $2}'"
+      register: retention_output
+
+    - assert:
+        that:
+          - retention_output.stdout == '-1'
+
+    - name: Get offset log retention
+      shell:
+        cmd: " cat /etc/kafka/server.properties | grep offsets.retention.minutes | awk -F= '{print $2}'"
+      register: offset_retention_output
+
+    - assert:
+        that:
+          - (offset_retention_output.stdout | int) > (60 * 24 * 365 * 100)

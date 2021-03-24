@@ -1,0 +1,7 @@
+security.protocol={{kafka_client_listeners[kafka_helper_tools_kafka_listener_name]['sasl_protocol']| kafka_protocol(kafka_client_listeners[kafka_helper_tools_kafka_listener_name]['ssl_enabled'])}}
+
+{% if kafka_client_listeners[kafka_helper_tools_kafka_listener_name]['sasl_protocol']| normalize_sasl_protocol == 'PLAIN' %}
+sasl.mechanism=PLAIN
+sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
+   username="{{sasl_plain_users.admin.principal}}" password="{{sasl_plain_users.admin.password}}";
+{% endif %}

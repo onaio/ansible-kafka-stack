@@ -1,0 +1,30 @@
+# DRAGONS: This playbook fragment must be separated from the rest of the deployment script to avoid
+# loading group_vars that depend on the default values here.
+# Generally we should (not* do this - but we need to get defaults as cp-ansible uses hash merging and
+# we don't.
+- name: Confluent Defaults Provisioning
+  hosts: "{{ defaults_hosts }}"
+  gather_facts: no
+  roles:
+    - role: confluent.variables
+    - role: ../confluent_defaults/confluent.common
+    - role: ../confluent_defaults/confluent.zookeeper
+    - role: ../confluent_defaults/confluent.kafka_broker
+    - role: ../confluent_defaults/confluent.schema_registry
+    - role: ../confluent_defaults/confluent.kafka_connect
+  tasks:
+    - name: Remembering Variable Defaults
+      set_fact:
+        confluent_defaults: # "{{ lookup('vars', 'vars') }}" # Fails when vars are really big?  Something in JSON handling in ansible?
+          # Probably clearer to hardcode this anyway :-/
+          confluent: "{{ lookup('vars', 'confluent') }}"
+          zookeeper: "{{ lookup('vars', 'zookeeper') }}"
+          zookeeper_service_environment_overrides: "{{ lookup('vars', 'zookeeper_service_environment_overrides') }}"
+          kafka_broker: "{{ lookup('vars', 'kafka_broker') }}"
+          kafka_broker_service_environment_overrides: "{{ lookup('vars', 'kafka_broker_service_environment_overrides') }}"
+          schema_registry: "{{ lookup('vars', 'schema_registry') }}"
+          schema_registry_service_environment_overrides: "{{ lookup('vars', 'schema_registry_service_environment_overrides') }}"
+          kafka_connect: "{{ lookup('vars', 'kafka_connect') }}"
+          kafka_connect_service_environment_overrides: "{{ lookup('vars', 'kafka_connect_service_environment_overrides') }}"
+
+      when: "(confluent_defaults | default('')) == ''"

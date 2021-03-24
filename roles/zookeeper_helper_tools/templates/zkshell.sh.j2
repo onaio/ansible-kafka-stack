@@ -1,0 +1,4 @@
+#!/bin/bash
+
+ZOOKEEPER_URL="{% for host in groups['zookeeper'] %}{% if loop.index > 1%},{% endif %}{{ host }}:{{zookeeper.properties.clientPort}}{% endfor %}"
+zookeeper-shell "${ZOOKEEPER_URL}" "$@"

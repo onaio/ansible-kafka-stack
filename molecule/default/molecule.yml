@@ -1,0 +1,80 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+lint:
+  name: yamllint
+  enabled: False
+platforms:
+  - name: canopy_kafka_host1
+    groups:
+      - zookeeper
+      - kafka_broker
+      - schema_registry
+      - kafka_connect
+      - kafka_backup_restore
+    image: ubuntu:18.04
+    override_command: False
+    networks:
+      - name: canopy_kafka_network
+    volumes:
+      - canopy_kafka_host1_cache:/var/cache
+      - canopy_kafka_host1_opt:/opt
+  - name: canopy_kafka_host2
+    groups:
+      - zookeeper
+      - kafka_broker
+      - schema_registry
+      - kafka_connect
+    image: ubuntu:18.04
+    override_command: False
+    networks:
+      - name: canopy_kafka_network
+    volumes:
+      - canopy_kafka_host2_cache:/var/cache
+      - canopy_kafka_host2_opt:/opt
+  - name: canopy_kafka_host3
+    groups:
+      - zookeeper
+      - kafka_broker
+      - schema_registry
+      - kafka_connect
+    image: ubuntu:18.04
+    override_command: False
+    networks:
+      - name: canopy_kafka_network
+    volumes:
+      - canopy_kafka_host3_cache:/var/cache
+      - canopy_kafka_host3_opt:/opt
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_CONFIG: ../../../../ansible.cfg
+    ANSIBLE_FILTER_PLUGINS: ../../../../filter_plugins:../../../../external/cp-ansible/filter_plugins
+    ANSIBLE_ROLES_PATH: user_roles:../../../../roles:../../../../external/cp-ansible/roles
+  lint:
+    name: ansible-lint
+    enabled: False
+verifier:
+  name: ansible
+  lint:
+    name: ansible-lint
+    enabled: false
+scenario:
+  name: default
+  test_sequence:
+    # - lint
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    # - idempotence
+    # - side_effect
+    - verify
+    - cleanup
+    - destroy
+

@@ -1,0 +1,25 @@
+- name: Install ping
+  package:
+    name: iputils-ping
+    state: present
+
+- name: Install netcat
+  package:
+    name: netcat
+    state: present
+
+- name: Create zkshell.sh
+  template:
+    src: zkshell.sh.j2
+    dest: "{{zookeeper_helper_tools_dir}}/zkshell.sh"
+    mode: 0755
+    owner: "{{zookeeper.user}}"
+    group: "{{zookeeper.group}}"
+
+- name: Create zklease.sh
+  template:
+    src: zklease.sh.j2
+    dest: "{{zookeeper_helper_tools_dir}}/zklease.sh"
+    mode: 0755
+    owner: "{{zookeeper.user}}"
+    group: "{{zookeeper.group}}"

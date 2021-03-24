@@ -1,0 +1,5 @@
+---
+- import_playbook: ./zookeeper.yml
+- import_playbook: ./kafka_brokers.yml
+- import_playbook: ./schema_registry.yml
+- import_playbook: ./kafka_connect.yml

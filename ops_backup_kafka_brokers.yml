@@ -1,0 +1,7 @@
+---
+- name: Ops Backup Kafka
+  hosts: kafka_broker
+  gather_facts: no
+  tasks:
+    - name: duply backup
+      shell: duply kafka backup

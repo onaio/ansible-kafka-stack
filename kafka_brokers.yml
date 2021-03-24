@@ -1,0 +1,39 @@
+---
+- name: Confluent Defaults and Repo Provisioning
+  import_playbook: ./confluent.yml
+  vars:
+    repo_hosts: kafka_broker
+
+- name: Kafka Broker Provisioning
+  hosts: kafka_broker
+  tags:
+    - kafka_broker
+  pre_tasks:
+    - debug:
+        var: kafka_broker
+      run_once: true
+  roles:
+    - role: confluent.kafka_broker
+      vars:
+        # Kafka expects the zookeeper object to be a client object, not the zookeeper above
+        zookeeper: "{{ zookeeper_client }}"
+
+- name: Kafka Helper Tools Provisioning
+  hosts: kafka_broker
+  tags:
+    - kafka_broker
+    - kafka_helper_tools
+  roles:
+    - role: ./roles/kafka_helper_tools
+      when: add_helper_tools | bool
+
+- name: Kafka Backup Provisioning
+  hosts: kafka_broker
+  tags:
+    - kafka_broker
+    - kafka_backup
+  roles:
+    - role: Stouts.backup
+      vars:
+        backup_profiles: "{{ kafka_backup_profiles }}"
+      when: is_backup_enabled | bool

@@ -1,0 +1,120 @@
+#!/bin/bash
+
+ZOOKEEPER_URL="{% for host in groups['zookeeper'] %}{% if loop.index > 1%},{% endif %}{{ host }}:{{zookeeper.properties.clientPort}}{% endfor %}"
+LEASE_ROOT=/bashleases
+
+if [[ $1 == --* ]]; then
+    if [[ $1 == --release ]]; then
+        RELEASE_LEASE=1
+        shift 1
+    else
+        echo "Unknown option $1"
+        exit 1
+    fi
+fi
+
+LEASE_NAME="$1"
+LEASE_TIME_SECS="${2:-3600}"
+LEASE_VALUE="${3:-$(hostname)}"
+MAX_SKEW_SECS=10
+
+if [[ -z ${LEASE_NAME} ]]; then
+    echo "No lease name specified."
+    exit 1
+fi
+
+zk_command() {
+    zookeeper-shell "${ZOOKEEPER_URL}" "$@" | grep -A 50000 "WatchedEvent state:SyncConnected" | grep -v "WatchedEvent state:SyncConnected"
+}
+
+timestamp_secs() {
+    date --utc +"%s"
+}
+
+renew_lease() {
+    # NOTE that we must renew while holding the lease
+    # NOTE that we must renew with the same ttl as we used on creation
+    RENEW_LEASE_RESULT="$(zk_command set "${LEASE_ROOT}/${LEASE_NAME}" "${LEASE_VALUE}/$(timestamp_secs)/${WINNING_LEASE_TIME_SECS}")"
+}
+
+try_acquire_lease() {
+
+    #
+    # Here we try to create a node in zookeeper to represent the lease - only one client can win
+    #
+
+    zk_command create "${LEASE_ROOT}" > /dev/null
+    zk_command create -t "$((LEASE_TIME_SECS * 1000))" "${LEASE_ROOT}/${LEASE_NAME}" "${LEASE_VALUE}/$(timestamp_secs)/${LEASE_TIME_SECS}" > /dev/null
+    WINNING_LEASE_DATA="$(zk_command get "${LEASE_ROOT}/${LEASE_NAME}")"
+    WINNING_LEASE_VALUE="$(echo "${WINNING_LEASE_DATA}" | awk '{split($0,s,"/"); print s[1];}')"
+    WINNING_LEASE_TIMESTAMP_SECS="$(echo "${WINNING_LEASE_DATA}" | awk '{split($0,s,"/"); print s[2];}')"
+    WINNING_LEASE_TIME_SECS="$(echo "${WINNING_LEASE_DATA}" | awk '{split($0,s,"/"); print s[3];}')"
+    WINNING_LEASE_REMAINING_TIME_SECS="$((WINNING_LEASE_TIMESTAMP_SECS + WINNING_LEASE_TIME_SECS - $(timestamp_secs)))"
+
+    if [[ ${LEASE_VALUE} == ${WINNING_LEASE_VALUE} ]]; then
+
+        #
+        # We've got the lease, see if we have time to re-acquire
+        # We need to re-acquire to prevent zookeeper from killing our node, resetting the ttl timer
+        #
+
+        if [[ $((WINNING_LEASE_REMAINING_TIME_SECS - MAX_SKEW_SECS)) < WINNING_LEASE_TIME_SECS ]]; then
+
+            echo "$WINNING_LEASE_REMAINING_TIME_SECS seconds remain for bash lease ${WINNING_LEASE_DATA}."
+
+            # Renew the lease to protect it for another WINNING_LEASE_TIME_SECS
+            renew_lease
+            if [[ -z ${RENEW_LEASE_RESULT} ]]; then
+                WINNING=1
+            else
+                echo "WARNING: could not renew bash lease ${WINNING_LEASE_DATA} - we must try to re-acquire."
+                WINNING=0
+            fi
+        else
+            echo "WARNING: could not renew expiring bash lease ${WINNING_LEASE_DATA} - ${WINNING_LEASE_REMAINING_TIME_SECS} seconds remain and we must wait to re-acquire."
+            WINNING=0
+        fi
+    else
+        WINNING=0
+    fi
+}
+
+release_lease() {
+    # NOTE that we must release while holding the lease
+    RELEASE_LEASE_RESULT="$(zk_command delete "${LEASE_ROOT}/${LEASE_NAME}")"
+}
+
+echo "Waiting for bash lease ${LEASE_NAME} with value ${LEASE_VALUE}..."
+
+while true; do
+    try_acquire_lease
+    if [[ ${WINNING} == 0 ]]; then
+
+        echo "Did not acquire bash lease - ${WINNING_LEASE_DATA} exists for about ${WINNING_LEASE_REMAINING_TIME_SECS} more secs..."
+
+        if [[ ${RELEASE_LEASE} == 1 ]]; then
+            # Job's already done, don't wait
+            echo "Bash lease ${LEASE_NAME} not held."
+            exit 0
+        fi
+
+        sleep "$((1 + RANDOM % 3)).$((RANDOM % 10))"
+    else
+
+        echo "Acquired renewed bash lease ${LEASE_NAME} with value ${WINNING_LEASE_VALUE} for ${WINNING_LEASE_TIME_SECS}..."
+
+        if [[ ${RELEASE_LEASE} == 1 ]]; then
+
+            release_lease
+            if [[ -z ${RELEASE_LEASE_RESULT} ]]; then
+
+                echo "Released bash lease ${WINNING_LEASE_DATA}."
+                exit 0
+            fi
+
+            echo "WARNING: could not release bash lease ${WINNING_LEASE_DATA} - we must try to re-acquire."
+        else
+            exit 0
+        fi
+    fi
+done
